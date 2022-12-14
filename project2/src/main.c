@@ -35,12 +35,19 @@
 /* Defines ----------------------------------------------------------*/ 
 #define VRX PC0     //PC0 is pin where joystick x axis is connected
 #define VRY PC1     //PC1 is pin where joystick y axis is connected
-#define M1 PB1
-#define M2 PB2
+#define M1 PB3      //PB1 is pin where servo motor 1 is connected
+#define M2 PB2      //PB2 is pin where servo motor 2 is connected
+
+#define M_default 1500
+#define M_left 600
+#define M_right 2400
+#define M_step 500
 
 
 uint16_t value = 0;
-int servo[2] = {M1, M2};
+uint32_t M1_pos = M_default;
+uint32_t M2_pos = M_default;
+
 /* Function definitions ----------------------------------------------*/
 /**********************************************************************
  * Function: Main function where the program execution begins
@@ -50,17 +57,13 @@ int servo[2] = {M1, M2};
  **********************************************************************/
 int main(void)
 {   
-    GPIO_mode_input_nopull(&DDRB, M1);
-    GPIO_mode_input_nopull(&DDRB, M2);
-    TCCR1A |= (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11);
-    TCCR1B |= (1 << WGM13) | (1 << WGM12) | (1 << CS11) | (1 << CS10);
-    DDRD |= (1 << DDD6);
-    TCCR0A |= (1 << COM0A1);
-    TCCR0A |= (1 << WGM01) | (1 << WGM00);
-    ICR1 = 39999;
-    OCR0A = ICR1 - 2000;
-    TCCR0B |= (1 << CS01);
 
+    lcd_init(LCD_DISP_ON);
+    lcd_gotoxy(0, 0);
+
+    GPIO_mode_output(&DDRB, M1);
+    GPIO_mode_output(&DDRB, M2);
+    
     // Configure Analog-to-Digital Convertion unit
     // Select ADC voltage reference to "AVcc with external capacitor at AREF pin"
 
@@ -74,15 +77,24 @@ int main(void)
     // Set clock prescaler to 128
     ADCSRA |= (1<<ADPS2 | 1<<ADPS1 | 1<<ADPS0);
 
+    TCCR1A &= ~((1 << COM1A0) | (1 << COM1B0));
+    TCCR1A |= (1 << WGM11) | (1 << COM1A1) | (1 << COM1B1);
+    TCCR1B |= (1 << WGM13);
+
+    ICR1 = 20000;
+    OCR1A = M1_pos;
+    OCR1B = M2_pos;
+    
+    TCCR1B |= (1 << CS11);
+
+    
+
 
     // Configure 16-bit Timer/Counter1 to start ADC conversion
     // Set prescaler to 16 ms and enable overflow interrupt    
-    TIM1_overflow_4ms();
-    TIM1_overflow_interrupt_enable();
-
-    TIM2_overflow_16ms();
-    TIM2_overflow_interrupt_enable();
-    // Enables interrupts by setting the global interrupt mask
+    TIM0_overflow_16ms();
+    TIM0_overflow_interrupt_enable();
+    
     sei();
 
     // Infinite loop
@@ -102,30 +114,26 @@ int main(void)
  * Function: Timer/Counter1 overflow interrupt
  * Purpose:  Use single conversion mode and start conversion every 100 ms.
  **********************************************************************/
-ISR(TIMER1_OVF_vect)
+ISR(TIMER0_OVF_vect)
 {
+    static int8_t noofoverflow = 0;
+    noofoverflow++;
+    if(noofoverflow > 50)
+    {
+        noofoverflow = 0;
+        ADCSRA |= (1 << ADSC);
+    }
 
-    if(value == 0)
+    /*if(value == 0)
     {
         ADMUX &= ~((1<<MUX0) | (1<<MUX1) | (1<<MUX2) | (1<<MUX3)); 
     }
     else if(value == 1)
     {
         ADMUX &= ~((1<<MUX1) | (1<<MUX2) | (1<<MUX3)); ADMUX |= (1<<MUX0);
-    }
+    }*/
 }
 
-
-ISR(TIMER2_OVF_vect)
-{
-    ADCSRA |= (1<<ADSC);
-    
-}
-
-/**********************************************************************
- * Function: ADC complete interrupt
- * Purpose:  Display converted value on LCD screen.
- **********************************************************************/
 ISR(ADC_vect)
 {
     static uint16_t xValue;
@@ -162,17 +170,22 @@ ISR(ADC_vect)
     lcd_gotoxy(7, 1);
     lcd_puts(string);
 
-    if (xValue < 100)
+    if (xValue < 300 && M1_pos >= M_left)
     {
-
+        
+        M1_pos -= M_step;
+        M2_pos -= M_step;
+        ICR1 = 500;
         lcd_gotoxy(11, 1);
         lcd_puts("     ");
         lcd_gotoxy(11,1);
         lcd_puts("LEFT ");
     }
-    else if (xValue > 900)
+    else if (xValue > 800 && M1_pos <= M_right)
     {
-
+        M1_pos += M_step;
+        M2_pos += M_step;
+        ICR1 =1000;
         lcd_gotoxy(11, 1);
         lcd_puts("     ");
         lcd_gotoxy(11,1);
@@ -196,7 +209,10 @@ ISR(ADC_vect)
     }
     else
     {
-        lcd_gotoxy(11,1);
+        lcd_gotoxy(11, 1);
         lcd_puts("NONE ");
     }
+    OCR1A = M1_pos;
+    OCR1B = M2_pos;
+
 }
