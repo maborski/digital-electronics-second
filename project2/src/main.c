@@ -35,13 +35,13 @@
 /* Defines ----------------------------------------------------------*/ 
 #define VRX PC0     //PC0 is pin where joystick x axis is connected
 #define VRY PC1     //PC1 is pin where joystick y axis is connected
-#define M1 PB3      //PB1 is pin where servo motor 1 is connected
+#define M1 PB1      //PB1 is pin where servo motor 1 is connected
 #define M2 PB2      //PB2 is pin where servo motor 2 is connected
 
 #define M_default 1500
 #define M_left 600
 #define M_right 2400
-#define M_step 500
+#define M_step 1500
 
 
 uint16_t value = 0;
@@ -85,8 +85,9 @@ int main(void)
     OCR1A = M1_pos;
     OCR1B = M2_pos;
     
-    TCCR1B |= (1 << CS11);
-
+    TCCR1B |= (1 << CS11) | (1 << CS10);
+    //PCICR |= (1<<PCIE0);
+    //PCMSK0 |= (1<< PCINT0);
     
 
 
@@ -175,7 +176,7 @@ ISR(ADC_vect)
         
         M1_pos -= M_step;
         M2_pos -= M_step;
-        ICR1 = 500;
+        ICR1 -= 500;
         lcd_gotoxy(11, 1);
         lcd_puts("     ");
         lcd_gotoxy(11,1);
@@ -185,7 +186,7 @@ ISR(ADC_vect)
     {
         M1_pos += M_step;
         M2_pos += M_step;
-        ICR1 =1000;
+        ICR1 +=500;
         lcd_gotoxy(11, 1);
         lcd_puts("     ");
         lcd_gotoxy(11,1);
